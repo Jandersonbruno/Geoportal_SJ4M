@@ -432,7 +432,7 @@ var LOGRADOURO_COLOR = '#1565c0';
 var CANTEIRO_COLOR = '#1b5e20';
 var HIDROGRAFIA_COLOR = '#4fc3f7';
 
-var BAIRRO_COLOR = '#7b2ff7';
+var BAIRRO_COLOR = '#e91e8c';
 
 var LAYER_DEFS = [
   {id:'edificacoes', name:'Edificações', dataId:'data-edificacoes', geomType:'polygon', listOrder:6, defaultOn:false, swatch:EDIF_COLOR,
@@ -461,7 +461,7 @@ var LAYER_DEFS = [
     popupTitle:function(){return 'Canteiro';}
   },
   {id:'bairros', name:'Bairro', dataId:'data-bairros', geomType:'polygon', listOrder:2, defaultOn:false, swatch:BAIRRO_COLOR,
-    style:function(){return {stroke:true,color:BAIRRO_COLOR,weight:2,dashArray:'6,4',fill:false,renderer:sharedRenderer};},
+    style:function(){return {stroke:true,color:BAIRRO_COLOR,weight:3,dashArray:'6,4',fill:false,renderer:sharedRenderer};},
     popupTitle:function(f){return f.properties.NOME || 'Bairro';},
     label:'NOME'
   },
