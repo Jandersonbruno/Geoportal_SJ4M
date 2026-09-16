@@ -26,6 +26,7 @@ Shp/         → GeoJSON de origem (exportados do QGIS) + metadados .qmd
 - Painel de informações ao clicar em uma feição
 - Ferramenta de medição de distância e área
 - Editor de croqui (desenho de polígono/linha/texto) com guia A4 para impressão
+- Exportar tabela de atributos de qualquer camada em XLSX
 
 ## Publicação
 
