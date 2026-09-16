@@ -28,7 +28,7 @@ Shp/         → GeoJSON de origem (exportados do QGIS) + metadados .qmd
 - Editor de croqui (desenho de polígono/linha/texto) com guia A4 para impressão
 - Exportar tabela de atributos em XLSX, com seleção de uma ou mais camadas (uma aba por camada no arquivo)
 - Rótulo de Tipologia sobre as edificações a partir de zoom bem próximo (escala ~10 m)
-- Campo do painel de atributos pisca ao passar o mouse por cima
+- Campo do painel de atributos acende ao passar o mouse por cima
 
 ## Publicação
 

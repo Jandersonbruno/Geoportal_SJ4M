@@ -128,13 +128,10 @@ header .brand-text span{font-size:11px;color:#cfe0f0;white-space:nowrap;overflow
 .info-row:last-child{border-bottom:none;}
 .info-row .k{display:block;font-size:10.5px;color:var(--text-mute);text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px;}
 .info-row .v{display:block;font-size:13.5px;font-weight:600;color:var(--text);word-break:break-word;}
-/* The attribute row under the cursor blinks while hovered, so it's obvious
-   which field the mouse is on inside a dense attributes list. */
-.info-row:hover{animation:infoRowBlink .5s ease-in-out infinite;}
-@keyframes infoRowBlink{
-  0%,100%{background:transparent;}
-  50%{background:rgba(29,95,168,.14);}
-}
+/* The attribute row under the cursor lights up while hovered — an instant,
+   steady highlight (not a repeating blink), so it's obvious which field the
+   mouse is on inside a dense attributes list. */
+.info-row:hover{background:rgba(29,95,168,.14);}
 
 /* ---------- MEASUREMENT TOOLBAR ---------- */
 .measure-banner{position:absolute;top:12px;left:50%;transform:translateX(-50%);background:var(--brand-dark);color:#fff;padding:8px 12px;border-radius:22px;font-size:12.5px;box-shadow:var(--shadow);z-index:1200;display:none;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center;max-width:calc(100vw - 40px);}
