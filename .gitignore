@@ -1,0 +1,24 @@
+# OS junk
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Editor/backup files
+*.bak
+*.tmp
+*.swp
+
+# Ortofoto/raster de trabalho (arquivos enormes — .tif chega a dezenas de GB,
+# .ecw a alguns GB; nunca vão para o git/GitHub). Depois de recortada no
+# limite urbano, a ortofoto deve ser convertida em tiles (XYZ) e hospedada
+# separadamente, não commitada aqui.
+IMG/
+*.ecw
+*.ecw.aux.xml
+*.tif
+*.tiff
+
+# Projetos de desktop GIS avulsos (não usados pelo portal web)
+*.mxd
+*.qgz
+*.qgs~
