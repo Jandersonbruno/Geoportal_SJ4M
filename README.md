@@ -5,8 +5,8 @@ Portal cartográfico web estático de São José dos Quatro Marcos (MT), constru
 ## Estrutura
 
 ```
-Geoportal_SJ4M.html   → aplicação completa (mapa, camadas, busca, medição, croqui)
-Shp/                  → GeoJSON de origem (exportados do QGIS) + metadados .qmd
+index.html   → aplicação completa (mapa, camadas, busca, medição, croqui)
+Shp/         → GeoJSON de origem (exportados do QGIS) + metadados .qmd
 ```
 
 ## Camadas exibidas
@@ -29,4 +29,4 @@ Shp/                  → GeoJSON de origem (exportados do QGIS) + metadados .qm
 
 ## Publicação
 
-Hospedado como site estático via [GitHub Pages](https://pages.github.com/).
+Hospedado como site estático via [GitHub Pages](https://pages.github.com/): https://jandersonbruno.github.io/Geoportal_SJ4M/
