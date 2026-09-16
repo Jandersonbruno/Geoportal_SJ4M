@@ -146,8 +146,8 @@ header .brand-text span{font-size:11px;color:#cfe0f0;white-space:nowrap;overflow
 .bairro-label::before{display:none;}
 .edif-label{background:none;border:none;box-shadow:none;font-weight:600;font-size:10px;line-height:1.2;color:#7a5c00;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff,0 0 5px #fff;pointer-events:none;text-align:center;}
 .edif-label::before{display:none;}
-.logradouro-label{background:none;border:none;box-shadow:none;font-weight:700;font-size:11px;color:#1565c0;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff,0 0 5px #fff;pointer-events:none;white-space:nowrap;}
-.logradouro-label::before{display:none;}
+.logradouro-label-icon{background:none;border:none;}
+.logradouro-label-icon .llr{display:inline-block;font-weight:700;font-size:11px;color:#1565c0;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff,0 0 5px #fff;pointer-events:none;white-space:nowrap;}
 
 .status-bar{position:absolute;left:10px;bottom:10px;z-index:800;background:rgba(255,255,255,.92);backdrop-filter:blur(2px);border-radius:8px;box-shadow:var(--shadow);padding:6px 10px;font-size:11px;color:var(--text-mute);display:flex;gap:14px;pointer-events:none;}
 .status-bar b{color:var(--text);font-weight:600;}
@@ -424,6 +424,7 @@ var HOVER_BLINK_OPACITY = 0.55;
    refreshEdifLabels(). Below this zoom they're skipped entirely, not just
    hidden, to avoid building thousands of tooltip DOM nodes for nothing. */
 var EDIF_LABEL_MIN_ZOOM = 20; // ~ when the scale control reads "10 m"
+var LOGRADOURO_LABEL_MIN_ZOOM = 20;
 
 var EDIF_COLOR = '#ffd600'; // vibrant yellow, same for every tipologia (CASA, SALA/LOJA, PISCINA, TELHEIRO, GALPAO...)
 var LOTE_COLOR = '#e53935';
@@ -453,7 +454,7 @@ var LAYER_DEFS = [
   {id:'logradouro', name:'Logradouro', dataId:'data-logradouro', geomType:'line', listOrder:4, defaultOn:false, swatchLine:LOGRADOURO_COLOR,
     style:function(){return {color:LOGRADOURO_COLOR,weight:2,opacity:.9,renderer:sharedRenderer};},
     popupTitle:function(f){return f.properties.NOME_MAPA || f.properties.NOME || f.properties.TIPO || 'Logradouro';},
-    label:'NOME_COMPL', labelDirection:'top', labelClassName:'logradouro-label'
+    label:'NOME_COMPL', rotatedLineLabel:true
   },
   {id:'canteiros', name:'Canteiro', dataId:'data-canteiros', geomType:'polygon', listOrder:3, defaultOn:false, swatch:CANTEIRO_COLOR,
     style:function(){return {stroke:true,color:CANTEIRO_COLOR,weight:1.3,fillColor:CANTEIRO_COLOR,fillOpacity:HOLLOW_FILL_OPACITY,renderer:sharedRenderer};},
@@ -494,6 +495,13 @@ bairroLabelsPane.style.pointerEvents = 'none';
 var edifLabelsPane = map.createPane('edifLabelsPane');
 edifLabelsPane.style.zIndex = 650;
 edifLabelsPane.style.pointerEvents = 'none';
+
+/* Logradouro's rotated name labels — only ~329 of them, so (unlike
+   edificações) no need for viewport culling; they're all created up front
+   and just hidden via this pane's opacity until zoomed in close. */
+var logradouroLabelsPane = map.createPane('logradouroLabelsPane');
+logradouroLabelsPane.style.zIndex = 650;
+logradouroLabelsPane.style.pointerEvents = 'none';
 
 var sharedRenderer = L.canvas({padding:0.5});
 
@@ -624,6 +632,66 @@ function stopHoverBlink(lyr, def){
   lyr.setStyle(def.style());
 }
 
+/* ================= ROTATED LINE LABELS (Logradouro) ================= */
+/* A plain permanent tooltip (direction:'center'/'top') sits beside the line,
+   axis-aligned — fine for polygons, but for a street it reads as detached
+   and misleading once the street isn't roughly horizontal. These instead
+   sit exactly on the line's midpoint and rotate to match its direction,
+   like a normal map's street labels. */
+var logradouroLabelsGroup = L.layerGroup();
+
+/* Picks the longest part of a MultiLineString (rare here) to label. */
+function longestLineCoords(parts){
+  var best = parts[0], bestLen = -1;
+  parts.forEach(function(coords){
+    var len = 0;
+    for (var i=0;i<coords.length-1;i++){
+      var dx = coords[i+1][0]-coords[i][0], dy = coords[i+1][1]-coords[i][1];
+      len += Math.sqrt(dx*dx+dy*dy);
+    }
+    if (len > bestLen){ bestLen = len; best = coords; }
+  });
+  return best;
+}
+/* Returns {latlng, angle} for the point exactly halfway along the line's
+   length (not just its bounding-box center) and the on-screen angle of the
+   segment there, clamped to [-90,90] so the text never renders upside down.
+   Angles are computed in projected pixel space at a fixed zoom — Web
+   Mercator only scales (no shear), so the angle is the same at every zoom
+   and never needs recomputing on zoom/pan. */
+function lineMidpointAngle(geometry){
+  var coords = geometry.type === 'MultiLineString' ? longestLineCoords(geometry.coordinates) : geometry.coordinates;
+  if (!coords || coords.length < 2) return null;
+  var pts = coords.map(function(c){ return map.project(L.latLng(c[1], c[0]), 18); });
+  var segLens = [], total = 0;
+  for (var i=0;i<pts.length-1;i++){ var d = pts[i].distanceTo(pts[i+1]); segLens.push(d); total += d; }
+  if (!total) return null;
+  var target = total/2, acc = 0;
+  for (var i=0;i<segLens.length;i++){
+    if (acc + segLens[i] >= target){
+      var t = segLens[i] ? (target-acc)/segLens[i] : 0;
+      var p0 = pts[i], p1 = pts[i+1];
+      var mid = L.point(p0.x+(p1.x-p0.x)*t, p0.y+(p1.y-p0.y)*t);
+      var angle = Math.atan2(p1.y-p0.y, p1.x-p0.x) * 180/Math.PI;
+      if (angle > 90) angle -= 180;
+      if (angle < -90) angle += 180;
+      return {latlng: map.unproject(mid, 18), angle: angle};
+    }
+    acc += segLens[i];
+  }
+  return null;
+}
+function addRotatedLineLabel(feature, text){
+  var mp = lineMidpointAngle(feature.geometry);
+  if (!mp) return;
+  var icon = L.divIcon({
+    className: 'logradouro-label-icon',
+    iconSize: [0,0],
+    html: '<span class="llr" style="transform:translate(-50%,-50%) rotate('+mp.angle.toFixed(1)+'deg)">'+escapeHtml(text)+'</span>'
+  });
+  L.marker(mp.latlng, {icon:icon, pane:'logradouroLabelsPane', interactive:false, keyboard:false}).addTo(logradouroLabelsGroup);
+}
+
 /* ================= LAYER BUILD ================= */
 var leafletLayers = {};   // id -> L.geoJSON layer
 var layerFeatureIndex = []; // for search: {label, sub, latlng, bounds, layerId, leafletLayer}
@@ -649,7 +717,9 @@ function loadLayer(def){
       if (def.label){
         var labelText = typeof def.label === 'function' ? def.label(feature) : feature.properties[def.label];
         if (labelText){
-          if (def.lazyLabel){
+          if (def.rotatedLineLabel){
+            addRotatedLineLabel(feature, String(labelText));
+          } else if (def.lazyLabel){
             // With ~8.6 mil edificações, binding+opening a permanent tooltip
             // on every single one the instant the layer is switched on would
             // create thousands of DOM nodes synchronously and visibly freeze
@@ -658,7 +728,7 @@ function loadLayer(def){
             lyr._lazyLabelText = String(labelText);
           } else {
             lyr.bindTooltip(String(labelText), {
-              permanent:true, direction: def.labelDirection || 'center',
+              permanent:true, direction:'center',
               className: def.labelClassName || 'bairro-label',
               pane: def.labelPane || 'bairroLabelsPane'
             });
@@ -748,6 +818,7 @@ function setLayerOn(id, on){
   updateOnCount();
   reassertBuildingsOnTop();
   if (id === 'edificacoes') refreshEdifLabels(); // populate labels right away if already zoomed in, instead of waiting for the next pan/zoom
+  if (id === 'logradouro'){ if (on) logradouroLabelsGroup.addTo(map); else map.removeLayer(logradouroLabelsGroup); }
 }
 
 /* ================= BASEMAP SWITCH (floating top-right dropdown) ================= */
@@ -1331,6 +1402,7 @@ map.on('zoomend', function(){
   document.getElementById('stZoom').textContent = map.getZoom();
   var z = map.getZoom();
   bairroLabelsPane.style.opacity = z >= 14 ? 1 : 0;
+  logradouroLabelsPane.style.opacity = z >= LOGRADOURO_LABEL_MIN_ZOOM ? 1 : 0;
   refreshEdifLabels();
   updateScaleReading();
 });
@@ -1345,6 +1417,7 @@ function boot(){
   fitInitial();
   document.getElementById('stZoom').textContent = map.getZoom();
   bairroLabelsPane.style.opacity = map.getZoom() >= 14 ? 1 : 0;
+  logradouroLabelsPane.style.opacity = map.getZoom() >= LOGRADOURO_LABEL_MIN_ZOOM ? 1 : 0;
   refreshEdifLabels();
   updateScaleReading();
   var overlay = document.getElementById('loadingOverlay');
