@@ -424,7 +424,7 @@ var HOVER_BLINK_OPACITY = 0.55;
    refreshEdifLabels(). Below this zoom they're skipped entirely, not just
    hidden, to avoid building thousands of tooltip DOM nodes for nothing. */
 var EDIF_LABEL_MIN_ZOOM = 20; // ~ when the scale control reads "10 m"
-var LOGRADOURO_LABEL_MIN_ZOOM = 20;
+var LOGRADOURO_LABEL_MIN_ZOOM = 19; // ~ when the scale control reads "20 m"
 
 var EDIF_COLOR = '#ffd600'; // vibrant yellow, same for every tipologia (CASA, SALA/LOJA, PISCINA, TELHEIRO, GALPAO...)
 var LOTE_COLOR = '#e53935';
@@ -653,43 +653,62 @@ function longestLineCoords(parts){
   });
   return best;
 }
-/* Returns {latlng, angle} for the point exactly halfway along the line's
-   length (not just its bounding-box center) and the on-screen angle of the
-   segment there, clamped to [-90,90] so the text never renders upside down.
-   Angles are computed in projected pixel space at a fixed zoom — Web
-   Mercator only scales (no shear), so the angle is the same at every zoom
-   and never needs recomputing on zoom/pan. */
-function lineMidpointAngle(geometry){
+/* Longer streets get the name repeated roughly every this many pixels of
+   ground distance (measured at the fixed reference zoom below, so it's a
+   real, constant ground distance — not tied to whatever zoom the user is
+   actually viewing at). ~220px @ zoom 18 in this area is on the order of
+   120-150m between repeats. */
+var LOGRADOURO_LABEL_SPACING_PX = 220;
+var LOGRADOURO_LABEL_PROJECT_ZOOM = 18;
+
+/* Returns an array of {latlng, angle} spaced evenly along the line's actual
+   length (not its bounding-box center — a single point there would land off
+   a curved/zigzag street), each with the on-screen angle of the segment
+   there, clamped to [-90,90] so the text never renders upside down. Angles
+   and spacing are computed in projected pixel space at a fixed zoom — Web
+   Mercator only scales (no shear), so both stay correct at every zoom the
+   user actually views at, with no recomputing on zoom/pan. The count of
+   repeats is chosen from the line's total length, then spread evenly across
+   it (rather than marching fixed steps from one end) so a street doesn't
+   end with an awkward bare stretch after the last repeat. */
+function rotatedLabelPointsAlongLine(geometry, spacingPx){
   var coords = geometry.type === 'MultiLineString' ? longestLineCoords(geometry.coordinates) : geometry.coordinates;
-  if (!coords || coords.length < 2) return null;
-  var pts = coords.map(function(c){ return map.project(L.latLng(c[1], c[0]), 18); });
+  if (!coords || coords.length < 2) return [];
+  var pts = coords.map(function(c){ return map.project(L.latLng(c[1], c[0]), LOGRADOURO_LABEL_PROJECT_ZOOM); });
   var segLens = [], total = 0;
   for (var i=0;i<pts.length-1;i++){ var d = pts[i].distanceTo(pts[i+1]); segLens.push(d); total += d; }
-  if (!total) return null;
-  var target = total/2, acc = 0;
-  for (var i=0;i<segLens.length;i++){
-    if (acc + segLens[i] >= target){
-      var t = segLens[i] ? (target-acc)/segLens[i] : 0;
-      var p0 = pts[i], p1 = pts[i+1];
-      var mid = L.point(p0.x+(p1.x-p0.x)*t, p0.y+(p1.y-p0.y)*t);
-      var angle = Math.atan2(p1.y-p0.y, p1.x-p0.x) * 180/Math.PI;
-      if (angle > 90) angle -= 180;
-      if (angle < -90) angle += 180;
-      return {latlng: map.unproject(mid, 18), angle: angle};
+  if (!total) return [];
+  var n = Math.max(1, Math.round(total / spacingPx));
+  var results = [];
+  for (var k=0; k<n; k++){
+    var target = (k + 0.5) * (total / n);
+    var acc = 0;
+    for (var i=0;i<segLens.length;i++){
+      var isLast = i === segLens.length - 1;
+      if (acc + segLens[i] >= target || isLast){
+        var t = segLens[i] ? Math.max(0, Math.min(1, (target-acc)/segLens[i])) : 0;
+        var p0 = pts[i], p1 = pts[i+1];
+        var pt = L.point(p0.x+(p1.x-p0.x)*t, p0.y+(p1.y-p0.y)*t);
+        var angle = Math.atan2(p1.y-p0.y, p1.x-p0.x) * 180/Math.PI;
+        if (angle > 90) angle -= 180;
+        if (angle < -90) angle += 180;
+        results.push({latlng: map.unproject(pt, LOGRADOURO_LABEL_PROJECT_ZOOM), angle: angle});
+        break;
+      }
+      acc += segLens[i];
     }
-    acc += segLens[i];
   }
-  return null;
+  return results;
 }
 function addRotatedLineLabel(feature, text){
-  var mp = lineMidpointAngle(feature.geometry);
-  if (!mp) return;
-  var icon = L.divIcon({
-    className: 'logradouro-label-icon',
-    iconSize: [0,0],
-    html: '<span class="llr" style="transform:translate(-50%,-50%) rotate('+mp.angle.toFixed(1)+'deg)">'+escapeHtml(text)+'</span>'
+  rotatedLabelPointsAlongLine(feature.geometry, LOGRADOURO_LABEL_SPACING_PX).forEach(function(p){
+    var icon = L.divIcon({
+      className: 'logradouro-label-icon',
+      iconSize: [0,0],
+      html: '<span class="llr" style="transform:translate(-50%,-50%) rotate('+p.angle.toFixed(1)+'deg)">'+escapeHtml(text)+'</span>'
+    });
+    L.marker(p.latlng, {icon:icon, pane:'logradouroLabelsPane', interactive:false, keyboard:false}).addTo(logradouroLabelsGroup);
   });
-  L.marker(mp.latlng, {icon:icon, pane:'logradouroLabelsPane', interactive:false, keyboard:false}).addTo(logradouroLabelsGroup);
 }
 
 /* ================= LAYER BUILD ================= */
