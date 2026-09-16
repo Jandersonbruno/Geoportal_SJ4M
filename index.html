@@ -424,7 +424,7 @@ var HOVER_BLINK_OPACITY = 0.55;
 /* Edificações labels only bind/open once zoomed in this close — see
    refreshEdifLabels(). Below this zoom they're skipped entirely, not just
    hidden, to avoid building thousands of tooltip DOM nodes for nothing. */
-var EDIF_LABEL_MIN_ZOOM = 18;
+var EDIF_LABEL_MIN_ZOOM = 20; // ~ when the scale control reads "10 m"
 
 var EDIF_COLOR = '#ffd600'; // vibrant yellow, same for every tipologia (CASA, SALA/LOJA, PISCINA, TELHEIRO, GALPAO...)
 var LOTE_COLOR = '#e53935';
@@ -442,12 +442,7 @@ var LAYER_DEFS = [
     /* Tipologia + Unidade(s), e.g. "CASA · Unid. 12" — only the parts that
        actually have a value, so it doesn't show a bare " · " for buildings
        missing one of the two fields. */
-    label:function(f){
-      var parts = [];
-      if (f.properties.TIPOLOGIA) parts.push(f.properties.TIPOLOGIA);
-      if (f.properties.UNIDADE) parts.push('Unid. ' + f.properties.UNIDADE);
-      return parts.join(' · ');
-    },
+    label:function(f){ return f.properties.TIPOLOGIA || ''; },
     labelPane:'edifLabelsPane', labelClassName:'edif-label', lazyLabel:true
   },
   {id:'lotes', name:'Lotes', dataId:'data-lotes', geomType:'polygon', listOrder:5, defaultOn:true, swatch:LOTE_COLOR,
