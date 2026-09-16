@@ -146,6 +146,8 @@ header .brand-text span{font-size:11px;color:#cfe0f0;white-space:nowrap;overflow
 .bairro-label::before{display:none;}
 .edif-label{background:none;border:none;box-shadow:none;font-weight:600;font-size:10px;line-height:1.2;color:#7a5c00;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff,0 0 5px #fff;pointer-events:none;text-align:center;}
 .edif-label::before{display:none;}
+.logradouro-label{background:none;border:none;box-shadow:none;font-weight:700;font-size:11px;color:#1565c0;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff,0 0 5px #fff;pointer-events:none;white-space:nowrap;}
+.logradouro-label::before{display:none;}
 
 .status-bar{position:absolute;left:10px;bottom:10px;z-index:800;background:rgba(255,255,255,.92);backdrop-filter:blur(2px);border-radius:8px;box-shadow:var(--shadow);padding:6px 10px;font-size:11px;color:var(--text-mute);display:flex;gap:14px;pointer-events:none;}
 .status-bar b{color:var(--text);font-weight:600;}
@@ -450,7 +452,8 @@ var LAYER_DEFS = [
   },
   {id:'logradouro', name:'Logradouro', dataId:'data-logradouro', geomType:'line', listOrder:4, defaultOn:false, swatchLine:LOGRADOURO_COLOR,
     style:function(){return {color:LOGRADOURO_COLOR,weight:2,opacity:.9,renderer:sharedRenderer};},
-    popupTitle:function(f){return f.properties.NOME_MAPA || f.properties.NOME || f.properties.TIPO || 'Logradouro';}
+    popupTitle:function(f){return f.properties.NOME_MAPA || f.properties.NOME || f.properties.TIPO || 'Logradouro';},
+    label:'NOME_COMPL', labelDirection:'top', labelClassName:'logradouro-label'
   },
   {id:'canteiros', name:'Canteiro', dataId:'data-canteiros', geomType:'polygon', listOrder:3, defaultOn:false, swatch:CANTEIRO_COLOR,
     style:function(){return {stroke:true,color:CANTEIRO_COLOR,weight:1.3,fillColor:CANTEIRO_COLOR,fillOpacity:HOLLOW_FILL_OPACITY,renderer:sharedRenderer};},
@@ -655,7 +658,7 @@ function loadLayer(def){
             lyr._lazyLabelText = String(labelText);
           } else {
             lyr.bindTooltip(String(labelText), {
-              permanent:true, direction:'center',
+              permanent:true, direction: def.labelDirection || 'center',
               className: def.labelClassName || 'bairro-label',
               pane: def.labelPane || 'bairroLabelsPane'
             });
