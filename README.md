@@ -27,6 +27,8 @@ Shp/         → GeoJSON de origem (exportados do QGIS) + metadados .qmd
 - Ferramenta de medição de distância e área
 - Editor de croqui (desenho de polígono/linha/texto) com guia A4 para impressão
 - Exportar tabela de atributos em XLSX, com seleção de uma ou mais camadas (uma aba por camada no arquivo)
+- Rótulo de Tipologia/Unidade sobre as edificações a partir de zoom próximo
+- Campo do painel de atributos pisca ao passar o mouse por cima
 
 ## Publicação
 

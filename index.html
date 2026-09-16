@@ -124,10 +124,17 @@ header .brand-text span{font-size:11px;color:#cfe0f0;white-space:nowrap;overflow
 .info-close{background:none;border:none;font-size:19px;cursor:pointer;color:var(--text-mute);line-height:1;flex:0 0 auto;padding:2px;}
 .info-close:hover{color:var(--text);}
 .info-panel-body{flex:1 1 auto;overflow-y:auto;padding:4px 14px 18px;}
-.info-row{padding:9px 0;border-bottom:1px solid #eef1f0;}
+.info-row{padding:9px 0;border-bottom:1px solid #eef1f0;border-radius:4px;}
 .info-row:last-child{border-bottom:none;}
 .info-row .k{display:block;font-size:10.5px;color:var(--text-mute);text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px;}
 .info-row .v{display:block;font-size:13.5px;font-weight:600;color:var(--text);word-break:break-word;}
+/* The attribute row under the cursor blinks while hovered, so it's obvious
+   which field the mouse is on inside a dense attributes list. */
+.info-row:hover{animation:infoRowBlink .5s ease-in-out infinite;}
+@keyframes infoRowBlink{
+  0%,100%{background:transparent;}
+  50%{background:rgba(29,95,168,.14);}
+}
 
 /* ---------- MEASUREMENT TOOLBAR ---------- */
 .measure-banner{position:absolute;top:12px;left:50%;transform:translateX(-50%);background:var(--brand-dark);color:#fff;padding:8px 12px;border-radius:22px;font-size:12.5px;box-shadow:var(--shadow);z-index:1200;display:none;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center;max-width:calc(100vw - 40px);}
@@ -140,6 +147,8 @@ header .brand-text span{font-size:11px;color:#cfe0f0;white-space:nowrap;overflow
 
 .bairro-label{background:none;border:none;box-shadow:none;font-weight:700;font-size:11.5px;color:#4a2a8a;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff,0 0 6px #fff;pointer-events:none;}
 .bairro-label::before{display:none;}
+.edif-label{background:none;border:none;box-shadow:none;font-weight:600;font-size:10px;line-height:1.2;color:#7a5c00;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff,0 0 5px #fff;pointer-events:none;text-align:center;}
+.edif-label::before{display:none;}
 
 .status-bar{position:absolute;left:10px;bottom:10px;z-index:800;background:rgba(255,255,255,.92);backdrop-filter:blur(2px);border-radius:8px;box-shadow:var(--shadow);padding:6px 10px;font-size:11px;color:var(--text-mute);display:flex;gap:14px;pointer-events:none;}
 .status-bar b{color:var(--text);font-weight:600;}
@@ -412,6 +421,10 @@ var HOLLOW_FILL_OPACITY = 0.04;
 var LIGHT_FILL_OPACITY = 0.16;
 /* Fill opacity snapped to while the mouse hovers a Lote/Edificação. */
 var HOVER_BLINK_OPACITY = 0.55;
+/* Edificações labels only bind/open once zoomed in this close — see
+   refreshEdifLabels(). Below this zoom they're skipped entirely, not just
+   hidden, to avoid building thousands of tooltip DOM nodes for nothing. */
+var EDIF_LABEL_MIN_ZOOM = 18;
 
 var EDIF_COLOR = '#ffd600'; // vibrant yellow, same for every tipologia (CASA, SALA/LOJA, PISCINA, TELHEIRO, GALPAO...)
 var LOTE_COLOR = '#e53935';
@@ -425,7 +438,17 @@ var LAYER_DEFS = [
   {id:'edificacoes', name:'Edificações', dataId:'data-edificacoes', geomType:'polygon', listOrder:6, defaultOn:false, swatch:EDIF_COLOR,
     style:function(){return {stroke:true,color:EDIF_COLOR,weight:1.3,fillColor:EDIF_COLOR,fillOpacity:LIGHT_FILL_OPACITY,renderer:sharedRenderer};},
     popupTitle:function(f){return f.properties.TIPOLOGIA || 'Edificação';},
-    hoverBlink:true
+    hoverBlink:true,
+    /* Tipologia + Unidade(s), e.g. "CASA · Unid. 12" — only the parts that
+       actually have a value, so it doesn't show a bare " · " for buildings
+       missing one of the two fields. */
+    label:function(f){
+      var parts = [];
+      if (f.properties.TIPOLOGIA) parts.push(f.properties.TIPOLOGIA);
+      if (f.properties.UNIDADE) parts.push('Unid. ' + f.properties.UNIDADE);
+      return parts.join(' · ');
+    },
+    labelPane:'edifLabelsPane', labelClassName:'edif-label', lazyLabel:true
   },
   {id:'lotes', name:'Lotes', dataId:'data-lotes', geomType:'polygon', listOrder:5, defaultOn:true, swatch:LOTE_COLOR,
     style:function(){return {stroke:true,color:LOTE_COLOR,weight:1.3,fillColor:LOTE_COLOR,fillOpacity:LIGHT_FILL_OPACITY,renderer:sharedRenderer};},
@@ -467,6 +490,15 @@ L.control.scale({position:'bottomright', imperial:false}).addTo(map);
 var bairroLabelsPane = map.createPane('bairroLabelsPane');
 bairroLabelsPane.style.zIndex = 650;
 bairroLabelsPane.style.pointerEvents = 'none';
+
+/* Edificações labels get their own pane (same stacking level as bairro's)
+   because they only make sense — and stay readable — much closer in: with
+   ~8.6 mil edificações, showing them at the same zoom as bairro labels
+   would flood the map. Its opacity is toggled on a much higher zoom
+   threshold, set in updateScaleReading()/boot() below. */
+var edifLabelsPane = map.createPane('edifLabelsPane');
+edifLabelsPane.style.zIndex = 650;
+edifLabelsPane.style.pointerEvents = 'none';
 
 var sharedRenderer = L.canvas({padding:0.5});
 
@@ -619,10 +651,24 @@ function loadLayer(def){
         lyr.on('mouseover', function(){ startHoverBlink(lyr, def); });
         lyr.on('mouseout', function(){ stopHoverBlink(lyr, def); });
       }
-      if (def.label && feature.properties[def.label]){
-        lyr.bindTooltip(String(feature.properties[def.label]), {
-          permanent:true, direction:'center', className:'bairro-label', pane:'bairroLabelsPane'
-        });
+      if (def.label){
+        var labelText = typeof def.label === 'function' ? def.label(feature) : feature.properties[def.label];
+        if (labelText){
+          if (def.lazyLabel){
+            // With ~8.6 mil edificações, binding+opening a permanent tooltip
+            // on every single one the instant the layer is switched on would
+            // create thousands of DOM nodes synchronously and visibly freeze
+            // the page. Instead just stash the text now; refreshEdifLabels()
+            // binds/unbinds tooltips only for buildings actually on screen.
+            lyr._lazyLabelText = String(labelText);
+          } else {
+            lyr.bindTooltip(String(labelText), {
+              permanent:true, direction:'center',
+              className: def.labelClassName || 'bairro-label',
+              pane: def.labelPane || 'bairroLabelsPane'
+            });
+          }
+        }
       }
       // search index
       var searchName = null, sub = def.name, searchExtra = '', searchCodeNum = null;
@@ -660,6 +706,28 @@ function reassertBuildingsOnTop(){
   }
 }
 
+/* Binds/opens a tooltip only for edificações that are both zoomed-in-enough
+   AND currently within the viewport, and unbinds it the instant either stops
+   being true — keeps the number of live label DOM nodes down to whatever's
+   actually on screen (tens, not ~8.6 mil) regardless of zoom/pan. */
+function refreshEdifLabels(){
+  var ed = leafletLayers.edificacoes;
+  if (!ed || !map.hasLayer(ed)) return;
+  var show = map.getZoom() >= EDIF_LABEL_MIN_ZOOM;
+  var bounds = show ? map.getBounds() : null;
+  ed.eachLayer(function(l){
+    if (!l._lazyLabelText) return;
+    var inView = show && l.getBounds && bounds.intersects(l.getBounds());
+    if (inView){
+      if (!l.getTooltip()){
+        l.bindTooltip(l._lazyLabelText, {permanent:true, direction:'center', className:'edif-label', pane:'edifLabelsPane', interactive:false});
+      }
+    } else if (l.getTooltip()){
+      l.unbindTooltip();
+    }
+  });
+}
+
 function buildLayerTree(){
   var box = document.getElementById('layerTree');
   var html = '';
@@ -684,6 +752,7 @@ function setLayerOn(id, on){
   var cb = document.querySelector('#layerTree input[data-layer="'+id+'"]'); if (cb) cb.checked = on;
   updateOnCount();
   reassertBuildingsOnTop();
+  if (id === 'edificacoes') refreshEdifLabels(); // populate labels right away if already zoomed in, instead of waiting for the next pan/zoom
 }
 
 /* ================= BASEMAP SWITCH (floating top-right dropdown) ================= */
@@ -1267,8 +1336,10 @@ map.on('zoomend', function(){
   document.getElementById('stZoom').textContent = map.getZoom();
   var z = map.getZoom();
   bairroLabelsPane.style.opacity = z >= 14 ? 1 : 0;
+  refreshEdifLabels();
   updateScaleReading();
 });
+map.on('moveend', refreshEdifLabels);
 map.on('moveend', updateScaleReading);
 
 /* ================= BOOT ================= */
@@ -1279,6 +1350,7 @@ function boot(){
   fitInitial();
   document.getElementById('stZoom').textContent = map.getZoom();
   bairroLabelsPane.style.opacity = map.getZoom() >= 14 ? 1 : 0;
+  refreshEdifLabels();
   updateScaleReading();
   var overlay = document.getElementById('loadingOverlay');
   overlay.classList.add('hide');
