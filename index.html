@@ -388,6 +388,12 @@ var HIDE_FIELDS = {}; // fields to hide entirely from popup if needed
    shape stays clickable for the popup, while visually it reads as a hollow,
    outline-only style as requested. */
 var HOLLOW_FILL_OPACITY = 0.04;
+/* Faint-but-visible background used only by Lotes/Edificações, so their
+   shapes read clearly against the basemap even before any interaction. */
+var LIGHT_FILL_OPACITY = 0.16;
+/* Fill opacity flashed on/off while the mouse hovers a Lote/Edificação. */
+var HOVER_BLINK_OPACITY = 0.55;
+var HOVER_BLINK_INTERVAL_MS = 350;
 
 var EDIF_COLOR = '#ffd600'; // vibrant yellow, same for every tipologia (CASA, SALA/LOJA, PISCINA, TELHEIRO, GALPAO...)
 var LOTE_COLOR = '#e53935';
@@ -399,13 +405,15 @@ var BAIRRO_COLOR = '#7b2ff7';
 
 var LAYER_DEFS = [
   {id:'edificacoes', name:'Edificações', dataId:'data-edificacoes', geomType:'polygon', listOrder:6, defaultOn:false, swatch:EDIF_COLOR,
-    style:function(){return {stroke:true,color:EDIF_COLOR,weight:1.3,fillColor:EDIF_COLOR,fillOpacity:HOLLOW_FILL_OPACITY,renderer:sharedRenderer};},
-    popupTitle:function(f){return f.properties.TIPOLOGIA || 'Edificação';}
+    style:function(){return {stroke:true,color:EDIF_COLOR,weight:1.3,fillColor:EDIF_COLOR,fillOpacity:LIGHT_FILL_OPACITY,renderer:sharedRenderer};},
+    popupTitle:function(f){return f.properties.TIPOLOGIA || 'Edificação';},
+    hoverBlink:true
   },
   {id:'lotes', name:'Lotes', dataId:'data-lotes', geomType:'polygon', listOrder:5, defaultOn:true, swatch:LOTE_COLOR,
-    style:function(){return {stroke:true,color:LOTE_COLOR,weight:1.3,fillColor:LOTE_COLOR,fillOpacity:HOLLOW_FILL_OPACITY,renderer:sharedRenderer};},
+    style:function(){return {stroke:true,color:LOTE_COLOR,weight:1.3,fillColor:LOTE_COLOR,fillOpacity:LIGHT_FILL_OPACITY,renderer:sharedRenderer};},
     popupTitle:function(f){return 'Lote ' + (f.properties.LOTE||'') + (f.properties.QUADRA? (' · Quadra '+f.properties.QUADRA):'');},
-    fieldOrder: LOTE_FIELD_ORDER
+    fieldOrder: LOTE_FIELD_ORDER,
+    hoverBlink:true
   },
   {id:'logradouro', name:'Logradouro', dataId:'data-logradouro', geomType:'line', listOrder:4, defaultOn:false, swatchLine:LOGRADOURO_COLOR,
     style:function(){return {color:LOGRADOURO_COLOR,weight:2,opacity:.9,renderer:sharedRenderer};},
@@ -560,6 +568,23 @@ function reassertSelectionOnTop(){
   if (selectionHighlight) selectionHighlight.eachLayer(function(l){ if (l.bringToFront) l.bringToFront(); });
 }
 
+/* ================= HOVER BLINK (Lotes / Edificações) ================= */
+/* While the mouse sits over a lote/edificação, its fill flashes between the
+   normal faint tint and a stronger one on a timer — purely a hover cue, so
+   it's independent of (and stacks fine with) the click selection highlight. */
+function startHoverBlink(lyr, def){
+  stopHoverBlink(lyr, def);
+  var bright = false;
+  lyr._blinkTimer = setInterval(function(){
+    bright = !bright;
+    lyr.setStyle({fillOpacity: bright ? HOVER_BLINK_OPACITY : LIGHT_FILL_OPACITY});
+  }, HOVER_BLINK_INTERVAL_MS);
+}
+function stopHoverBlink(lyr, def){
+  if (lyr._blinkTimer){ clearInterval(lyr._blinkTimer); lyr._blinkTimer = null; }
+  lyr.setStyle(def.style());
+}
+
 /* ================= LAYER BUILD ================= */
 var leafletLayers = {};   // id -> L.geoJSON layer
 var layerFeatureIndex = []; // for search: {label, sub, latlng, bounds, layerId, leafletLayer}
@@ -578,6 +603,10 @@ function loadLayer(def){
         openInfoPanel(def, feature);
         setSelectionHighlight(lyr);
       });
+      if (def.hoverBlink){
+        lyr.on('mouseover', function(){ startHoverBlink(lyr, def); });
+        lyr.on('mouseout', function(){ stopHoverBlink(lyr, def); });
+      }
       if (def.label && feature.properties[def.label]){
         lyr.bindTooltip(String(feature.properties[def.label]), {
           permanent:true, direction:'center', className:'bairro-label', pane:'bairroLabelsPane'
