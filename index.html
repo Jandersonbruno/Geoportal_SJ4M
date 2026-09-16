@@ -391,9 +391,8 @@ var HOLLOW_FILL_OPACITY = 0.04;
 /* Faint-but-visible background used only by Lotes/Edificações, so their
    shapes read clearly against the basemap even before any interaction. */
 var LIGHT_FILL_OPACITY = 0.16;
-/* Fill opacity flashed on/off while the mouse hovers a Lote/Edificação. */
+/* Fill opacity snapped to while the mouse hovers a Lote/Edificação. */
 var HOVER_BLINK_OPACITY = 0.55;
-var HOVER_BLINK_INTERVAL_MS = 120;
 
 var EDIF_COLOR = '#ffd600'; // vibrant yellow, same for every tipologia (CASA, SALA/LOJA, PISCINA, TELHEIRO, GALPAO...)
 var LOTE_COLOR = '#e53935';
@@ -568,20 +567,14 @@ function reassertSelectionOnTop(){
   if (selectionHighlight) selectionHighlight.eachLayer(function(l){ if (l.bringToFront) l.bringToFront(); });
 }
 
-/* ================= HOVER BLINK (Lotes / Edificações) ================= */
-/* While the mouse sits over a lote/edificação, its fill flashes between the
-   normal faint tint and a stronger one on a timer — purely a hover cue, so
-   it's independent of (and stacks fine with) the click selection highlight. */
+/* ================= HOVER HIGHLIGHT (Lotes / Edificações) ================= */
+/* Instant on/off — no repeated flashing while the mouse sits still over one
+   feature. The "fast" cue instead comes from how quickly it snaps to the
+   stronger tint and back as the mouse sweeps from lot to lot. */
 function startHoverBlink(lyr, def){
-  stopHoverBlink(lyr, def);
-  var bright = false;
-  lyr._blinkTimer = setInterval(function(){
-    bright = !bright;
-    lyr.setStyle({fillOpacity: bright ? HOVER_BLINK_OPACITY : LIGHT_FILL_OPACITY});
-  }, HOVER_BLINK_INTERVAL_MS);
+  lyr.setStyle({fillOpacity: HOVER_BLINK_OPACITY});
 }
 function stopHoverBlink(lyr, def){
-  if (lyr._blinkTimer){ clearInterval(lyr._blinkTimer); lyr._blinkTimer = null; }
   lyr.setStyle(def.style());
 }
 
