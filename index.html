@@ -50,13 +50,19 @@ header .brand-text span{font-size:11px;color:#cfe0f0;white-space:nowrap;overflow
 .hbtn svg{width:15px;height:15px;flex:0 0 auto;}
 .hbtn .lbl{display:inline;}
 
-/* ---------- EXPORTAR XLSX (header dropdown: choose a layer, download its table) ---------- */
+/* ---------- EXPORTAR XLSX (header dropdown: pick one or more layers, download their tables) ---------- */
 .export-float{position:relative;}
-.export-dropdown{display:none;position:absolute;top:calc(100% + 8px);right:0;background:#fff;border-radius:8px;box-shadow:var(--shadow);padding:5px;z-index:2000;min-width:210px;}
-.export-float.open .export-dropdown{display:block;}
+.export-dropdown{display:none;position:absolute;top:calc(100% + 8px);right:0;background:#fff;border-radius:8px;box-shadow:var(--shadow);padding:5px;z-index:2000;min-width:230px;}
+.export-float.open .export-dropdown{display:flex;flex-direction:column;}
 .export-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--text);font-weight:500;}
 .export-item:hover{background:#eaf2fa;}
+.export-item input[type=checkbox]{width:15px;height:15px;accent-color:var(--brand);flex:0 0 auto;cursor:pointer;}
 .export-item .ei-dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto;}
+.export-item .ei-name{flex:1 1 auto;}
+.export-footer{border-top:1px solid var(--panel-border);margin-top:4px;padding-top:6px;}
+.export-confirm{width:100%;background:var(--brand);color:#fff;border:none;border-radius:6px;padding:8px 10px;font-size:12.5px;font-weight:600;cursor:pointer;}
+.export-confirm:hover{background:var(--brand-dark);}
+.export-confirm:disabled{background:#c7d2db;cursor:not-allowed;}
 
 /* ---------- BODY LAYOUT ---------- */
 /* column so the croqui editor can stack the map above a real (non-overlaid)
@@ -722,27 +728,50 @@ document.addEventListener('click', function(e){
 });
 
 /* ================= EXPORTAR XLSX ================= */
-/* Exports the full attribute table of a chosen layer (regardless of whether
-   it's currently switched on in the map) as a .xlsx workbook — one row per
-   feature, columns following the same field order/labels used in the info
-   panel, so the spreadsheet reads the same as what's shown on click. */
+/* Exports the full attribute table of one or more chosen layers (regardless
+   of whether they're currently switched on in the map) as a single .xlsx
+   workbook — one sheet per layer, one row per feature, columns following
+   the same field order/labels used in the info panel, so the spreadsheet
+   reads the same as what's shown on click. */
 var exportFloat = document.getElementById('exportFloat');
 var btnExport = document.getElementById('btnExport');
 var exportDropdown = document.getElementById('exportDropdown');
+var exportConfirmBtn;
 
 (function buildExportDropdown(){
-  var html = '';
+  var html = '<div class="export-list">';
   LAYER_DEFS.slice().sort(function(a,b){return b.listOrder-a.listOrder;}).forEach(function(def){
     var dotColor = def.swatch || def.swatchLine || '#999';
-    html += '<div class="export-item" data-layer="'+def.id+'"><span class="ei-dot" style="background:'+dotColor+'"></span>'+def.name+'</div>';
+    html += '<label class="export-item"><input type="checkbox" data-layer="'+def.id+'">'
+          + '<span class="ei-dot" style="background:'+dotColor+'"></span>'
+          + '<span class="ei-name">'+def.name+'</span></label>';
   });
+  html += '</div><div class="export-footer"><button type="button" class="export-confirm" id="exportConfirmBtn" disabled>Selecione ao menos uma camada</button></div>';
   exportDropdown.innerHTML = html;
-  exportDropdown.querySelectorAll('.export-item').forEach(function(el){
-    el.addEventListener('click', function(){
-      var def = LAYER_DEFS.filter(function(d){return d.id === el.getAttribute('data-layer');})[0];
-      if (def) exportLayerXlsx(def);
-      exportFloat.classList.remove('open');
+
+  exportConfirmBtn = document.getElementById('exportConfirmBtn');
+  var checkboxes = exportDropdown.querySelectorAll('input[type=checkbox]');
+  function updateConfirmLabel(){
+    var n = exportDropdown.querySelectorAll('input[type=checkbox]:checked').length;
+    exportConfirmBtn.disabled = n === 0;
+    exportConfirmBtn.textContent = n === 0 ? 'Selecione ao menos uma camada'
+      : (n === 1 ? 'Exportar 1 camada' : 'Exportar ' + n + ' camadas');
+  }
+  checkboxes.forEach(function(cb){ cb.addEventListener('change', updateConfirmLabel); });
+
+  exportConfirmBtn.addEventListener('click', function(){
+    var defs = [];
+    checkboxes.forEach(function(cb){
+      if (cb.checked){
+        var def = LAYER_DEFS.filter(function(d){return d.id === cb.getAttribute('data-layer');})[0];
+        if (def) defs.push(def);
+      }
     });
+    if (!defs.length) return;
+    exportLayersXlsx(defs);
+    exportFloat.classList.remove('open');
+    checkboxes.forEach(function(cb){ cb.checked = false; });
+    updateConfirmLabel();
   });
 })();
 
@@ -753,12 +782,12 @@ btnExport.addEventListener('click', function(e){
   exportFloat.classList.toggle('open');
 });
 
-function exportLayerXlsx(def){
+/* Builds { headers, rows } for one layer's attribute table. */
+function buildLayerTable(def){
   var raw = document.getElementById(def.dataId).textContent;
-  var geojson;
-  try { geojson = JSON.parse(raw); } catch(e){ alert('Não foi possível ler os dados desta camada.'); return; }
+  var geojson = JSON.parse(raw);
   var feats = geojson.features || [];
-  if (!feats.length){ alert('A camada "'+def.name+'" não tem feições para exportar.'); return; }
+  if (!feats.length) return null;
   var keys = def.fieldOrder || Object.keys(feats[0].properties || {});
   // two raw keys can share the same friendly label (e.g. OBJECTID/ID both
   // read as "ID") — de-duplicate so neither column silently overwrites
@@ -776,10 +805,38 @@ function exportLayerXlsx(def){
     keys.forEach(function(k, i){ row[headers[i]] = props[k]; });
     return row;
   });
-  var ws = XLSX.utils.json_to_sheet(rows);
+  return {headers: headers, rows: rows};
+}
+
+/* Builds one workbook with a sheet per layer (skipping any with no
+   features) and triggers a single download. */
+function exportLayersXlsx(defs){
   var wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, def.name.substring(0,31));
-  XLSX.writeFile(wb, def.name.replace(/[\/\\?%*:|"<>]/g,'') + '_SJ4M.xlsx');
+  var usedSheetNames = {};
+  var skipped = [];
+  defs.forEach(function(def){
+    var table;
+    try { table = buildLayerTable(def); }
+    catch(e){ skipped.push(def.name); return; }
+    if (!table){ skipped.push(def.name); return; }
+    var sheetName = def.name.substring(0,31);
+    var n = 2;
+    while (usedSheetNames[sheetName]){ sheetName = (def.name.substring(0,28) + ' ' + n).substring(0,31); n++; }
+    usedSheetNames[sheetName] = true;
+    var ws = XLSX.utils.json_to_sheet(table.rows);
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  });
+  if (!wb.SheetNames.length){
+    alert('Nenhuma das camadas selecionadas tem feições para exportar.');
+    return;
+  }
+  var filename = defs.length === 1
+    ? defs[0].name.replace(/[\/\\?%*:|"<>]/g,'') + '_SJ4M.xlsx'
+    : 'Geoportal_SJ4M_' + wb.SheetNames.length + '_camadas.xlsx';
+  XLSX.writeFile(wb, filename);
+  if (skipped.length){
+    alert('Sem feições para exportar em: ' + skipped.join(', ') + '.\nAs demais camadas foram exportadas normalmente.');
+  }
 }
 
 /* ================= SEARCH ================= */
