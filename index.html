@@ -297,6 +297,7 @@ header .brand-text span{font-size:11px;color:#cfe0f0;white-space:nowrap;overflow
             <div class="bd-item" data-base="blank">Fundo Branco <span class="bd-check">✓</span></div>
             <div class="bd-item active" data-base="osm">OpenStreetMap <span class="bd-check">✓</span></div>
             <div class="bd-item" data-base="sat">Google Satélite <span class="bd-check">✓</span></div>
+            <div class="bd-item" data-base="ortho">Ortofoto Local <span class="bd-check">✓</span></div>
           </div>
         </div>
 
@@ -478,6 +479,9 @@ var LAYER_DEFS = [
    stays crisp at any zoom, only the raster basemap underneath gets soft). */
 var gsat = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{subdomains:['mt0','mt1','mt2','mt3'],maxZoom:22,maxNativeZoom:21,attribution:'Imagery &copy; Google'});
 var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{subdomains:['a','b','c'],maxZoom:22,maxNativeZoom:19,attribution:'&copy; OpenStreetMap contributors'});
+/* Ortofoto municipal propria, recortada no limite urbano e hospedada como
+   tiles soltos num bucket Cloudflare R2 publico (ver upload_tiles_r2.py). */
+var ortho = L.tileLayer('https://pub-1cdf9e95784a46ff956d5b82bac4211c.r2.dev/{z}/{x}/{y}.jpg',{maxZoom:22,maxNativeZoom:21,minNativeZoom:10,attribution:'Ortofoto: Prefeitura de São José dos Quatro Marcos'});
 
 var map = L.map('map', {center:CENTER, zoom:15, zoomControl:false, layers:[osm], maxZoom:22});
 L.control.zoom({position:'bottomright'}).addTo(map);
@@ -845,7 +849,7 @@ var basemapFloat = document.getElementById('basemapFloat');
 var basemapBtn = document.getElementById('basemapBtn');
 var basemapLabel = document.getElementById('basemapLabel');
 var basemapDropdown = document.getElementById('basemapDropdown');
-var BASEMAP_NAMES = {sat:'Google Satélite', osm:'OpenStreetMap', blank:'Fundo Branco'};
+var BASEMAP_NAMES = {sat:'Google Satélite', osm:'OpenStreetMap', blank:'Fundo Branco', ortho:'Ortofoto Local'};
 
 basemapBtn.addEventListener('click', function(e){
   e.stopPropagation();
@@ -858,10 +862,11 @@ basemapDropdown.querySelectorAll('.bd-item').forEach(function(el){
     basemapDropdown.querySelectorAll('.bd-item').forEach(function(o){o.classList.remove('active');});
     el.classList.add('active');
     basemapLabel.textContent = BASEMAP_NAMES[which];
-    map.eachLayer(function(l){ if (l===gsat || l===osm) map.removeLayer(l); });
+    map.eachLayer(function(l){ if (l===gsat || l===osm || l===ortho) map.removeLayer(l); });
     document.getElementById('map').classList.toggle('blank-bg', which==='blank');
     if (which==='sat'){ gsat.addTo(map); }
     else if (which==='osm'){ osm.addTo(map); }
+    else if (which==='ortho'){ ortho.addTo(map); }
     basemapFloat.classList.remove('open');
   });
 });

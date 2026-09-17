@@ -9,6 +9,13 @@ index.html   → aplicação completa (mapa, camadas, busca, medição, croqui)
 Shp/         → GeoJSON de origem (exportados do QGIS) + metadados .qmd
 ```
 
+## Basemaps
+
+- OpenStreetMap
+- Google Satélite
+- Fundo Branco
+- **Ortofoto Local** — ortofoto municipal própria (recortada no limite urbano, zoom 10-21), hospedada como tiles em um bucket Cloudflare R2 público. Gerada no QGIS (`native:tilesxyzdirectory`), empacotada em `IMG/Ortofoto_4M.mbtiles` e enviada ao R2 com `upload_tiles_r2.py` (credenciais via variável de ambiente, nunca no código).
+
 ## Camadas exibidas
 
 - Lotes
